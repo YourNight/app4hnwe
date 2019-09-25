@@ -1,43 +1,29 @@
-import _thread
-import cv2
 import datetime
-import random
 import threading
-from tkinter import ttk, messagebox, filedialog
-import time
+from tkinter import messagebox, filedialog
 from tkinter import *
 from win32api import GetSystemMetrics
 from PIL import Image, ImageTk
-import os
-import numpy as np
 
 from util.camera_util import Camera
-from util.mysql_util import Database
-from util.csv_util import CsvWR
 from util.pickle_util import PickleDB
-from util.serial_util import Com
-from util.socket_util import RobotSocket
-from util.thread_util import Job
 from util.decode_util import Decode
 
 COLORS = ['red', 'blue', 'yellow', 'pink', 'cyan', 'green', 'black']
+
+
 class State:
     def __init__(self):
         self.x = 0
         self.y = 0
         self.click = 0
 
+
 class QrCode:
-    def __init__(self, cam, database, com, csvwr, job, pk=None):
+    def __init__(self, cam, pk=None):
         self.state = State()
         self.img_path = ''
-        self.rect_image_path = ''
-        self.exe_path = sys.path[0]+'/source/Debug/zxing-cv.exe'
         self.decoder = Decode()
-        self.__stop = True
-        self.any_time_suspend_flag = None
-        self.flag = True
-        self.last_box_value = ''
         self.root = Tk(className='二维码识别(阿黄专用)')
         self.width = 1366  # 主窗口长
         self.height = 736  # 主窗口宽
@@ -58,9 +44,6 @@ class QrCode:
         self.take_photo_btn = Button(self.root, command=self.take_photo, activebackground='blue',
                                      activeforeground='white', bd=3,
                                      bg='cyan', text='拍照')
-        self.stop_btn = Button(self.root, command=self.stop, activebackground='blue',
-                               activeforeground='white', bd=3,
-                               bg='cyan', text='停止')
         self.btn_width = 75
         self.btn_height = 30
 
@@ -97,74 +80,13 @@ class QrCode:
 
         # 实例对象
         self.cam = cam
-        self.database = database
-
-        self.com = com
-        self.csvwr = csvwr
-        self.job = job
         self.pk = pk
-        self.robot = None
-
-        self.wind_can_pic = None  # 右侧画布图片
-        self.alert_pic = None  # 弹出框图片
-
-        # 弹出框
-        self.bboxList = []  # 存放 x,y,w,h
-        self.bboxId = None  # 存放单个矩形框
-        self.bboxIdList = []  # 存放所有矩形框
-        self.hl = None  # 存放
-        self.vl = None
-
-        self.window_enter = Toplevel(self.root)
-        self.window_enter.geometry('1200x608')
-        self.window_enter.title('Rect window')
-        # self.window_enter.wm_attributes("-topmost", 1)
-
-        self.pic_frame = Frame(self.window_enter, width=False, height=False)
-        self.pic_ysb = Scrollbar(self.window_enter, orient=VERTICAL)
-        self.pic_xsb = Scrollbar(self.window_enter, orient=HORIZONTAL)
-        self.picPanel = Canvas(self.pic_frame, width=912, height=608, cursor='tcross', scrollregion=(0, 0, 912, 608))
-        self.picPanel.config(yscrollcommand=self.pic_ysb.set, xscrollcommand=self.pic_xsb.set, )
-        self.picPanel.bind("<Button-1>", self.mouseClick)
-        self.picPanel.bind("<Motion>", self.mouseMove)
-        self.pic_xsb.config(command=self.picPanel.xview)
-        self.pic_ysb.config(command=self.picPanel.yview)
-        self.pic_ysb.pack(side=RIGHT, fill=Y, )
-        self.pic_xsb.pack(side=BOTTOM, fill=X, )
-        self.picPanel.pack(side=LEFT, )
-        self.pic_frame.place(x=0, y=0)
-
-        self.boxes_label = Label(self.window_enter, text='Bounding boxes:')
-        self.boxes_label.place(x=950, y=20)
-
-        self.list_frame = Frame(self.window_enter)
-        self.list_frame.place(x=950, y=40)
-        self.list_scrollbar = Scrollbar(self.list_frame, orient=VERTICAL)
-        self.listbox = Listbox(self.list_frame, width=22, height=12,yscrollcommand=self.list_scrollbar.set)
-        self.listbox.pack(side=LEFT)
-        self.list_scrollbar.config(command=self.listbox.yview)
-        self.list_scrollbar.pack(side=RIGHT, fill=Y)
-
-        self.btnDel = Button(self.window_enter, text='Delete', command=self.delBBox, width=20)
-        self.btnDel.place(x=950, y=270)
-        self.btnClear = Button(self.window_enter, text='ClearAll', command=self.clearBBox, width=20)
-        self.btnClear.place(x=950, y=310)
-        self.rect_img = None
-        self.btnDecode = Button(self.window_enter, text='Select & Decode', command=self.decode, width=20)
-        self.btnDecode.place(x=950, y=350)
-        self.rect_canvas = Canvas(self.window_enter, height=180, width=200)
-        self.rect_canvas.place(x=950, y=390)
-
-        self.window_enter.withdraw()
-        self.window_enter.protocol('WM_DELETE_WINDOW', self.window_enter.withdraw)
 
     def gui_arrange(self):
 
-        self.stop_btn.place(relx=52.0 / 80, rely=2.0 / 50, width=self.btn_width, height=self.btn_height, )
         self.choose_path_btn.place(relx=64.0 / 80, rely=2.0 / 50, width=self.btn_width, height=self.btn_height, )
         self.reconnect_btn.place(relx=62.0 / 80, rely=16.0 / 50, width=self.btn_width, height=self.btn_height, )
         self.take_photo_btn.place(relx=62.0 / 80, rely=22.0 / 50, width=self.btn_width, height=self.btn_height, )
-        self.stop_btn.place(relx=62.0 / 80, rely=26.0 / 50, width=self.btn_width, height=self.btn_height, )
 
         self.exposure_str.place(relx=62.0 / 80, rely=30.0 / 50, width=self.btn_width, height=self.btn_height, )
         self.exposure_entry.place(relx=70.0 / 80, rely=30.0 / 50, width=self.btn_width, height=self.btn_height, )
@@ -198,16 +120,6 @@ class QrCode:
         self.log_text.config(state=DISABLED)
         self.log_text.see(END)
         # self.log_text.update()
-
-    def select_bottle_by_value(self, bottle_value):
-        sql = "select id from box_bottle where bottle_value = '" + bottle_value + "'"
-        results = self.database.execute_select(sql)
-        print('results--->')
-        print(len(results))
-        if len(results) == 0:
-            return True
-        else:
-            return False
 
     def update_canvas(self):
         print(self.file_path)
@@ -263,23 +175,6 @@ class QrCode:
                                                             width = 2, \
                                                             outline = COLORS[len(self.bboxList) % len(COLORS)])
 
-    def delBBox(self):
-        sel = self.listbox.curselection()
-        if len(sel) != 1 :
-            return
-        idx = int(sel[0])
-        self.picPanel.delete(self.bboxIdList[idx])
-        self.bboxIdList.pop(idx)
-        self.bboxList.pop(idx)
-        self.listbox.delete(idx)
-
-    def clearBBox(self):
-        for idx in range(len(self.bboxIdList)):
-            self.picPanel.delete(self.bboxIdList[idx])
-        self.listbox.delete(0, len(self.bboxList))
-        self.bboxIdList = []
-        self.bboxList = []
-
     def decode(self):
         threading.Thread(target=self.decode_rect).start()
 
@@ -304,66 +199,8 @@ class QrCode:
         # print(photo_path)
 
     def take_photo(self):
-
         t = threading.Thread(target=self.take_photo_thread)
         t.start()
-
-    def decode_rect(self):
-        now = time.time()
-        print('start time-->', end='')
-        print(now)
-        sel = self.listbox.curselection()
-        if len(sel) != 1:
-            return
-        idx = int(sel[0])
-        img = Image.open(self.img_path)  # 原图
-        img_np = np.asarray(img)  # 原图数组
-        ratio_y = img_np.shape[0]/608
-        ratio_x = img_np.shape[1]/912
-        _, y, _, h = [int(i * ratio_y) for i in self.bboxList[idx]]
-        x, _, w, _ = [int(i * ratio_x) for i in self.bboxList[idx]]
-        rect_np = img_np[y:y + h, x:x + w]  # 截取的图片
-        rect_image = Image.fromarray(rect_np)  # 截取后转化成图片
-        now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-        rannum = random.randint(0, 1000)
-        self.rect_image_path = sys.path[0] + '/source/rect_pic_direction/' + "picture" + now_time + "_" + str(rannum) + ".jpg"
-        rect_image.save(self.rect_image_path)  # 保存截图
-
-        p_h = 180 / h
-        p_w = 200 / w
-        p = p_h if p_h <= p_w else p_w
-        rect_image = rect_image.resize((int(w * p), int(h * p)), Image.ANTIALIAS)
-        self.rect_img = ImageTk.PhotoImage(rect_image)
-        self.rect_canvas.create_image(0, 0, anchor='nw', image=self.rect_img)  # 将图片置于画布上
-
-        self.popen_cmd(self.exe_path + ' ' + self.rect_image_path)
-        end = time.time()
-        print('end time-->', end='')
-        print(end)
-        print('time consuming-->', end='')
-        print(end - now)
-
-
-
-    def popen_cmd(self, cmd):
-        # cmd = 'F:/PycharmProjects/app/tkGUI/Debug/zxing-cv.exe ' + self.img_path
-        # print(cmd)
-        # now = time.time()
-        # print('start time-->', end='')
-        # print(now)
-        result = os.popen(cmd)
-        text = result.read()
-        print(text)
-        result.close()
-        r = str(text).split()
-        msg = r[-1] if r[-1] != 'a' else 'Please retry!'
-        # end = time.time()
-        # print('end time-->', end='')
-        # print(end)
-        # print('time consuming-->', end='')
-        # print(end - now)
-        self.write_msg(self.img_path + '--->' + str(msg))
-        print(self.img_path)
 
     def start_cam_thread(self):
         """开启相机，获取实时图像"""
@@ -380,158 +217,48 @@ class QrCode:
         self.csvwr.set_path_parent(self.pk.get_dir_path())
         print(dir_path)
 
-    def thread_suspend(self):
-        while self.any_time_suspend_flag:
-            i = 10
-            while i > 0:
-                time.sleep(1)
-                print(1)
-        # self.any_time_suspend_flag = True
-
-    def any_time_suspend(self):
-        """随时暂停"""
-        self.any_time_suspend_flag = True
-        th = threading.Thread(target=self.thread_suspend)
-        th.start()
-        th.join()
-
-    def any_time_continue(self):
-        self.any_time_suspend_flag = False
-
-    def init_database(self):
-        # 初始化数据库
-        return self.database.get_connect()
-
-    def init_com(self):
-        # 初始化云台
-        return self.com.get_serial()
-
     def init_cam(self):
         # 初始化相机并开始取流
         try:
             self.cam.get_device()
             self.cam.connect_camera_by_enum()
             self.cam.start_grabbing()
-
             return True
         except:
             return False
 
-    def init_slide_way(self):
-        # 初始化单轴机器人
-        try:
-            self.robot.get_socket()
-            return self.robot.connection_flag
-        except:
-            return False
-
-    def stop(self):
-        """急停后停止所有工作"""
-        # self.database.close_connect()
-        # self.com.stop()
-        self.cam.stop()
-        self.job.stop()
-
-    def thread_for_stop(self):
-        """急停信号获取"""
-        while self.__stop:
-            # 获取急停标志
-            # print('正在获取急停标志...')
-            time.sleep(1)
-        self.stop()
-
-    def start_thread_for_stop(self):
-        """急停线程，一直获取机器传来的急停信号"""
-        stop_th = threading.Thread(target=self.thread_for_stop)
-        stop_th.start()
-
-    def delete_last_box(self):
-        """删除过期数据--暂停的时候调用"""
-        now_time = datetime.datetime.now()
-        last_time = now_time - datetime.timedelta(minutes=30)
-        t = last_time.strftime('%Y-%m-%d %H:%M:%S')
-        sql = "update box_bottle set delete_flag = 1 where time > '"+t+"' and box_value = '"+self.last_box_value+"'"
-        ret = self.database.execute_update(sql)
-        print('共删除'+str(ret)+'条数据...')
-
-    def pause(self):
-        """暂停"""
-        self.delete_last_box()
-        self.job.pause()
-
     def init_devices(self):
         """初始化设备并检测"""
         temp = '出现错误:\n'
-        # 创建数据库对象
-        self.database = Database(host='127.0.0.1', port=3306, user='test', password='123456', database_name='test')
 
         # 创建相机对象
         self.cam = Camera(self)
-
-        # 创建云台对象
-        self.com = Com(port='COM3', baudrate=2400)
-
-        # 创建单轴机器人对象
-        self.robot = RobotSocket()
-
-        # ret_database = self.init_database()
-        ret_database = True
         ret_cam = self.init_cam()
         # TODO  设置显示曝光时间
         # self.exposure_value.set(self.cam.get_exposure_value())
-        # ret_cam = True
-        # ret_com = self.init_com()
-        ret_com = True
-        # ret_slide_way = self.init_slide_way()
-        ret_slide_way = True
-        if ret_database and ret_com and ret_cam and ret_slide_way:
+        if ret_cam:
             self.light_canvas.itemconfig(self.cam_light, fill='green')
-            self.light_canvas.itemconfig(self.com_light, fill='green')
-            self.light_canvas.itemconfig(self.slide_way_light, fill='green')
         else:
-            if ret_database is not True:
-                temp = temp + '数据库 '
             if ret_cam is not True:
                 temp += '相机 '
                 self.light_canvas.itemconfig(self.cam_light, fill='red')
-            if ret_com is not True:
-                temp += '云台 '
-                self.light_canvas.itemconfig(self.com_light, fill='red')
-            if ret_slide_way is not True:
-                temp += '滑轨 '
-                self.light_canvas.itemconfig(self.slide_way_light, fill='red')
             temp += '\n连接失败！请检查设备！'
             messagebox.showwarning(title='警告！', message=temp)
 
 
     def main(self):
         self.init_devices()
-
-        # 监听单轴机器人对象
-        # th_robot = threading.Thread(target=self.robot.wait_for_send_cmd)
-
-        # 创建csv对象
-        self.csvwr = CsvWR()
-
         # 创建pickle对象
         self.pk = PickleDB()
         file_dir_path = self.pk.get_value_from_key(self.pk.DIR_PATH)
         if file_dir_path != '':
             self.cam.set_photo_path(self.pk.get_value_from_key(self.pk.DIR_PATH))
-            self.csvwr.set_path_parent(self.pk.get_value_from_key(self.pk.DIR_PATH))
-
-        # th_robot.start()  # 开启单轴机器人监听
-        # self.robot.send_command(self.robot.ZERO_POINT)
-
-        self.job = Job(self)
-        self.stop_btn.config(command=self.job.change_suspend_flag)
 
         self.gui_arrange()
-        self.start_thread_for_stop()
         self.start_cam_thread()
         mainloop()
 
 
-qr = QrCode('', '', '', '', '')
+qr = QrCode('', '')
 qr.gui_arrange()
 qr.main()
