@@ -178,19 +178,6 @@ class QrCode:
     def decode(self):
         threading.Thread(target=self.decode_rect).start()
 
-    def open_other_frame(self):
-        # self.window_enter.update()
-        if not self.window_enter:
-            self.window_enter = Toplevel(self.root)
-            self.root.update()
-        img = Image.open(self.img_path)
-        ret = img.resize((912, 608), Image.ANTIALIAS)
-        self.alert_pic = ImageTk.PhotoImage(ret)
-        self.picPanel.create_image(0, 0, anchor='nw', image=self.alert_pic)  # 将图片置于右侧画布上
-        self.picPanel.update()
-        self.window_enter.deiconify()
-        # self.popen_cmd(self.exe_path + ' ' + self.img_path)
-
     def take_photo_thread(self):
         self.log_text.delete(0, 'end')
         self.img_path = self.cam.take_photo()
