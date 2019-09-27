@@ -1,6 +1,9 @@
 # coding: utf-8
 import base64
 import datetime
+import time
+from tkinter import messagebox
+
 import math
 import os
 import random
@@ -119,6 +122,15 @@ class Camera:
             self.exposure_time = f.value
         return self.exposure_time
 
+    def getIP(self):
+        ip = c_int()
+        ret = self.cam.MV_CC_GetIntValue('GevPersistentIPAddress', ip)
+        if ret != 0:
+            print('get ip fail')
+        else:
+            print('ip:' + str(ip))
+
+
     def start_grabbing(self):
         # ch:获取数据包大小 | en:Get payload size
         stParam = MVCC_INTVALUE()
@@ -139,7 +151,10 @@ class Camera:
     def real_time_image(self):
         stDeviceList = MV_FRAME_OUT_INFO_EX()
         memset(byref(stDeviceList), 0, sizeof(stDeviceList))
-        data_buf = (c_ubyte * self.nPayloadSize)()
+        try:
+            data_buf = (c_ubyte * self.nPayloadSize)()
+        except:
+            messagebox.showwarning(title='警告！', message='启动失败，请确认相机是否连接成功！')
         while True:
             ret = self.cam.MV_CC_GetOneFrameTimeout(byref(data_buf), self.nPayloadSize, stDeviceList, 1000)
             if ret == 0:
@@ -174,12 +189,39 @@ class Camera:
                         image = image.convert('RGB')
                     # print(img_buff)
                     self.qr_code.update_canvas_from_cam(image)
-                    # print("Show Image succeed!")
+                    if self.qr_code.decode_flag:
+                        print('start=========================================')
+                        if self.qr_code.boxes:
+                            self.qr_code.canvas.delete(self.qr_code.boxes)
+                        if self.qr_code.texts:
+                            self.qr_code.canvas.delete(self.qr_code.texts)
+                        # 霍尼韦尔解码
+                        self.qr_code.decoder.setPros(stDeviceList.nWidth, stDeviceList.nHeight, img_buff)
+                        decode_time = self.qr_code.decoder.start_decode()
+                        self.qr_code.show_decode_time(decode_time)
+                        print(self.qr_code.decoder.ResultCount)
+                        if self.qr_code.decoder.ResultCount > 0:
+                            self.qr_code.drawQR(self.qr_code.decoder.Bounds)
+                            for i in range(self.qr_code.decoder.ResultCount):
+                                print(i, ':', self.qr_code.decoder.ResultList[i].res_str.value.decode())
+                                print(
+                                    'Top Left = ({}, {}) Top Right = ({}, {}) Bottom Right = ({}, {}) Bottom Left = ({}, {})'
+                                        .format(self.qr_code.decoder.Bounds[i][0][0], self.qr_code.decoder.Bounds[i][0][1],
+                                                self.qr_code.decoder.Bounds[i][1][0], self.qr_code.decoder.Bounds[i][1][1],
+                                                self.qr_code.decoder.Bounds[i][2][0], self.qr_code.decoder.Bounds[i][2][1],
+                                                self.qr_code.decoder.Bounds[i][3][0], self.qr_code.decoder.Bounds[i][3][1]))
+                        print('***********************************************************************************')
+                        self.qr_code.decoder.clearResults()
+                        self.qr_code.decoder.clearBounds()
+                        self.qr_code.decoder.ResultCount = 0
 
     def take_photo(self):
         stDeviceList = MV_FRAME_OUT_INFO_EX()
         memset(byref(stDeviceList), 0, sizeof(stDeviceList))
-        data_buf = (c_ubyte * self.nPayloadSize)()
+        try:
+            data_buf = (c_ubyte * self.nPayloadSize)()
+        except:
+            messagebox.showwarning(title='警告！', message='启动失败，请确认相机是否连接成功！')
         ret = self.cam.MV_CC_GetOneFrameTimeout(byref(data_buf), self.nPayloadSize, stDeviceList, 1000)
         if ret == 0:
             print("get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (
@@ -214,11 +256,17 @@ class Camera:
                 cdll.msvcrt.memcpy(byref(img_buff), stConvertParam.pImageBuffer,
                                    stConvertParam.nImageLen)
                 print('start=========================================')
+                if self.qr_code.boxes:
+                    self.qr_code.canvas.delete(self.qr_code.boxes)
+                if self.qr_code.texts:
+                    self.qr_code.canvas.delete(self.qr_code.texts)
                 # 霍尼韦尔解码
                 self.qr_code.decoder.setPros(stDeviceList.nWidth, stDeviceList.nHeight, img_buff)
-                self.qr_code.decoder.main()
+                decode_time = self.qr_code.decoder.start_decode()
+                self.qr_code.show_decode_time(decode_time)
                 print(self.qr_code.decoder.ResultCount)
                 if self.qr_code.decoder.ResultCount > 0:
+                    self.qr_code.drawQR(self.qr_code.decoder.Bounds)
                     for i in range(self.qr_code.decoder.ResultCount):
                         print(i, ':', self.qr_code.decoder.ResultList[i].res_str.value.decode())
                         print('Top Left = ({}, {}) Top Right = ({}, {}) Bottom Right = ({}, {}) Bottom Left = ({}, {})'
@@ -230,7 +278,6 @@ class Camera:
                 self.qr_code.decoder.clearResults()
                 self.qr_code.decoder.clearBounds()
                 self.qr_code.decoder.ResultCount = 0
-
                 file_open.write(img_buff)
             print("Save Image succeed!")
             return file_path

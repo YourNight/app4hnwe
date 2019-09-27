@@ -1,9 +1,6 @@
 import time
 from ctypes import *
 
-import numpy as np
-from PIL import Image
-
 
 class ResultEntry:
     def __init__(self):
@@ -65,7 +62,7 @@ class Decode:
         if self.ResultCount >= self.RESULT_MAX:
             self.sd_dll.SD_Set(handle, c_long(0x40006001), c_void_p(1))
 
-    def main(self):
+    def start_decode(self):
         start_time = time.time()
         handle = self.sd_dll.SD_Create()
         handle = c_int(handle)
@@ -109,6 +106,7 @@ class Decode:
         # decode
         # sd_dll.SD_Decode.restype = c_int
         # sd_dll.SD_Decode.argtypes = [c_int]
+        start_time = time.time()
         result = self.sd_dll.SD_Decode(handle)
         print("Decode result", result)
 
@@ -130,6 +128,7 @@ class Decode:
         end_time = time.time()
         print("Total time =", end_time - start_time)
         self.sd_dll.SD_Destroy(handle)
+        return format(float(end_time - start_time), '0.4f')
 
     def clearResults(self):
         self.ResultList.clear()
