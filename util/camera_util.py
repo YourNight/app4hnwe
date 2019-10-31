@@ -24,6 +24,7 @@ class Camera:
         self.cam = None
         self.nPayloadSize = None
         self.photo_path = photo_path
+        self.pic_type = 'jpg'
         # self.create_dir()
         self.qr_code = qr_code
 
@@ -66,6 +67,11 @@ class Camera:
                 print("create handle fail! ret[0x%x]" % ret)
                 return False
             else:
+                # 设置自动获取IP
+                ret = self.cam.MV_GIGE_SetIpConfig(MV_IP_CFG_DHCP)
+                if ret != 0:
+                    print("set ip DCHP fail! ret[0x%x]" % ret)
+                    return False
                 # ch:打开设备 | en:Open device
                 ret = self.cam.MV_CC_OpenDevice(MV_ACCESS_Exclusive, 0)
                 if ret != 0:
@@ -107,10 +113,45 @@ class Camera:
     def set_exposure_value(self):
 
         ret = self.cam.MV_CC_SetFloatValue('ExposureTime', float(self.exposure_time))
+        # self.cam.MV_CC_SetFloatValue('StrobeEnable', 0)
         if ret != 0:
             print('set exposure time fail')
         else:
             print('set exposure time:' + str(self.exposure_time))
+
+    def set_light(self, state):
+        # if self.enable_light:
+        #     self.enable_light = 0
+        # else:
+        #     self.enable_light = 1
+        self.cam.MV_CC_SetBoolValue('FlashEnable', int(state))
+        print('设置灯光: ' + str(state))
+
+    def set_light_mode(self, mode):
+        ret = self.cam.MV_CC_SetEnumValue('LightMode', int(mode))
+        if ret != 0:
+            print('set LightMode fail')
+        else:
+            print('set LightMode:' + str(mode))
+
+    def set_light_flashTime(self, flashTime=1000):
+        ret = self.cam.MV_CC_SetIntValue('FlashTime', flashTime)
+        if ret != 0:
+            print('set FlashTime fail')
+        else:
+            print('set FlashTime:' + str(flashTime))
+
+
+    def set_ROI(self, width, height, offsetX, offsetY):
+        # ch:停止取流 | en:Stop grab image
+        ret = self.cam.MV_CC_StopGrabbing()
+        self.cam.MV_CC_SetEnumValue('RegionSelector', 8)
+        self.cam.MV_CC_SetEnumValue('RegionDestination', 0)
+        self.cam.MV_CC_SetIntValue('Width', width)
+        self.cam.MV_CC_SetIntValue('Height', height)
+        self.cam.MV_CC_SetIntValue('OffsetX', offsetX)
+        self.cam.MV_CC_SetIntValue('OffsetY', offsetY)
+        self.start_grabbing()
 
     def get_exposure_value(self):
         f = c_float()
@@ -200,6 +241,8 @@ class Camera:
                         decode_time = self.qr_code.decoder.start_decode()
                         self.qr_code.show_decode_time(decode_time)
                         print(self.qr_code.decoder.ResultCount)
+                        if self.qr_code.decoder.ResultCount == self.qr_code.codes_num_value:
+                            self.qr_code.change_decode_flag()
                         if self.qr_code.decoder.ResultCount > 0:
                             self.qr_code.drawQR(self.qr_code.decoder.Bounds)
                             for i in range(self.qr_code.decoder.ResultCount):
@@ -250,7 +293,7 @@ class Camera:
                 now_time = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
                 rannum = random.randint(0, 1000)
                 self.create_dir()
-                file_path = self.photo_path+"picture"+now_time+"_"+str(rannum)+".jpg"
+                file_path = self.photo_path+"picture"+now_time+"_"+str(rannum)+"."+self.pic_type
                 file_open = open(file_path.encode('ascii'), 'wb+')
                 img_buff = (c_ubyte * stConvertParam.nImageLen)()
                 cdll.msvcrt.memcpy(byref(img_buff), stConvertParam.pImageBuffer,
@@ -266,9 +309,11 @@ class Camera:
                 self.qr_code.show_decode_time(decode_time)
                 print(self.qr_code.decoder.ResultCount)
                 if self.qr_code.decoder.ResultCount > 0:
-                    self.qr_code.drawQR(self.qr_code.decoder.Bounds)
+                    # self.qr_code.drawQR(self.qr_code.decoder.Bounds)
+                    self.qr_code.showResultByPhoto()
                     for i in range(self.qr_code.decoder.ResultCount):
-                        print(i, ':', self.qr_code.decoder.ResultList[i].res_str.value.decode())
+                        code = self.qr_code.decoder.ResultList[i].res_str.value.decode()
+                        print(i, ':', code)
                         print('Top Left = ({}, {}) Top Right = ({}, {}) Bottom Right = ({}, {}) Bottom Left = ({}, {})'
                               .format(self.qr_code.decoder.Bounds[i][0][0], self.qr_code.decoder.Bounds[i][0][1],
                                       self.qr_code.decoder.Bounds[i][1][0], self.qr_code.decoder.Bounds[i][1][1],

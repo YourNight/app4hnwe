@@ -14,6 +14,7 @@ class Decode:
         self.ResultCount = 0
         self.ResultList = []
         self.Bounds = []
+        self.codes_type = []
         # self.dll_path = r'source\SD_x64.dll'
         self.dll_path = r'E:\workspace\vsworkspace\hnwe\SD_x64.dll'
         # self.image_path = r'E:\workspace\c++_workspace\scandit-barcodescanner-windows_5.11.4\CommandLineQrCodeScanner\bin\Debug\1.bmp'
@@ -94,11 +95,15 @@ class Decode:
         # self.check_SD_set(handle, c_long(0x40003002), self.CB_FUNC(self.SD_CB_Progress))
 
         # enable qr code
-        self.check_SD_set(handle, c_long(0x40010201), c_void_p(1))
-        self.check_SD_set(handle, c_long(0x40010301), c_void_p(1))
-        self.check_SD_set(handle, c_long(0x40011101), c_void_p(1))
-        self.check_SD_set(handle, c_long(0x40011001), c_void_p(1))
-        self.check_SD_set(handle, c_long(0x40010901), c_void_p(1))  # qr
+        for code_type_var in self.codes_type:
+            if code_type_var.get() != 0:
+                print(type(hex(code_type_var.get())))
+                self.check_SD_set(handle, int(code_type_var.get()), c_void_p(1))
+        # self.check_SD_set(handle, c_long(0x40010201), c_void_p(1))
+        # self.check_SD_set(handle, c_long(0x40010301), c_void_p(1))
+        # self.check_SD_set(handle, c_long(0x40011101), c_void_p(1))
+        # self.check_SD_set(handle, c_long(0x40011001), c_void_p(1))
+        # self.check_SD_set(handle, c_long(0x40010901), c_void_p(1))  # qr
 
         # mirror
         self.check_SD_set(handle, c_long(0x40004003), c_void_p(1))
@@ -106,7 +111,7 @@ class Decode:
         # decode
         # sd_dll.SD_Decode.restype = c_int
         # sd_dll.SD_Decode.argtypes = [c_int]
-        start_time = time.time()
+        # start_time = time.time()
         result = self.sd_dll.SD_Decode(handle)
         print("Decode result", result)
 

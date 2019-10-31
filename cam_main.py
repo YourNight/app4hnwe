@@ -1,7 +1,7 @@
 import datetime
 import threading
 import time
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
 from tkinter import *
 from win32api import GetSystemMetrics
 from PIL import Image, ImageTk
@@ -12,13 +12,16 @@ from util.decode_util import Decode
 
 
 class QrCode:
-    def __init__(self, cam, pk=None):
+    def __init__(self):
         self.boxes = []
         self.texts = []
         self.img_path = ''
         self.decoder = Decode()
         self.decode_flag = False
-        self.root = Tk(className='二维码识别(Beat)')
+        self.light_flag = True
+        self.codes_num_value = 20
+        self.root = Tk(className='条码识别(Beat)')
+        self.root.iconbitmap(default=sys.path[0]+'/source/jcst.ico')
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.width = 1366  # 主窗口长
         self.height = 736  # 主窗口宽
@@ -30,31 +33,25 @@ class QrCode:
             str(self.width) + 'x' + str(self.height) + '+' + str(int(self.left)) + '+' + str(int(self.top)))
         self.root.bind('<Escape>', lambda e: self.on_closing())
         self.root.bind('<Return>', lambda e: self.exposure_confirm())
-        # 创建一个菜单栏，这里我们可以把他理解成一个容器，在窗口的上方
+
         self.menubar = Menu(self.root)
 
-        # 定义一个空菜单单元
         self.filemenu = Menu(self.menubar, tearoff=0, borderwidth=2, relief='raised')
-
-        # 将上面定义的空菜单命名为`File`，放在菜单栏中，就是装入那个容器中
         self.menubar.add_cascade(label='选项', menu=self.filemenu)
+
         self.menubar.add_command(label='开始', command=self.start_cam_thread)
-        self.menubar.config()
-        a = self.menubar.add_command(label='解码', command=self.change_decode_flag)
-        print(a)
+        self.menubar.add_command(label='解码', command=self.change_decode_flag)
         self.menubar.add_command(label='拍照', command=self.take_photo)
         self.menubar.add_command(label='工具', command=None)
+        self.menubar.add_command(label='设置', command=self.setting_config)
         self.menubar.add_command(label='帮助', command=None)
 
         self.filemenu.add_command(label='开始', command=self.start_cam_thread)
-        self.filemenu.add_command(label='拍照', command=self.take_photo)  ##同样的在`File`中加入`Open`小菜单
-        self.filemenu.add_command(label='重新连接', command=self.init_cam)
-        self.filemenu.add_command(label='选择保存路径', command=self.choose_path)  ##同样的在`File`中加入`Save`小菜单
-
+        self.filemenu.add_command(label='拍照', command=self.take_photo)
+        self.filemenu.add_command(label='重新连接', command=self.reconnection)
+        self.filemenu.add_command(label='选择保存路径', command=self.choose_path)
         self.filemenu.add_separator()  # 分割线
-
-        # 退出
-        self.filemenu.add_command(label='退出', command=self.on_closing)
+        self.filemenu.add_command(label='退出', command=self.on_closing)  # 退出
 
         self.root.config(menu=self.menubar)
 
@@ -62,7 +59,8 @@ class QrCode:
         self.btn_height = 30
 
         # 画布
-        self.file_path = sys.path[0]+'/source/9001.jpg'
+        self.file_path = sys.path[0]+'/source/jc-st.jpg'
+        self.file_path = sys.path[0]+'/source/jc-st.jpg'
         self.filename = None
         self.canvas_width = 912
         self.canvas_height = 608
@@ -93,11 +91,143 @@ class QrCode:
                                                 bg='cyan', text='拍照并解码')
 
         # 实例对象
-        self.cam = cam
-        self.pk = pk
+        # self.cam = cam
+        # self.pk = pk
+
+        # c1.pack()
+        # 亮度
+        self.scale = Scale(self.root, label='亮度调节（us）', from_=0, to=5000, orient=HORIZONTAL, command=self.get_scale_value, length=900, showvalue=1, tickinterval=1000, resolution=1)
+        self.scale.set(1000)  # 设置初始值
+        self.scale.place(relx=2.0 / 80, rely=43.0 / 50, )
+
+        # 设置页面
+        self.setting_window = Toplevel(self.root)
+        self.setting_window.geometry('400x800')
+        self.setting_window.title('Settings')
+        self.setting_window.withdraw()
+        self.setting_window.protocol('WM_DELETE_WINDOW', self.setting_window.withdraw)
+
+        # 多选框 选择不同码
+        self.code_str = Label(self.setting_window, text='选择码质:')
+        self.code_frame = Frame(self.setting_window, height=50, width=50, borderwidth=2, relief=RIDGE)
+        self.codes = ['QR', 'DataMatrix', 'PDF', 'RSS', 'CODE39', 'AZ', 'CB', 'CODE128', 'CODABLOCK_F', 'CODABLOCK_A',
+                      'I25', 'MC', 'MICROPDF', 'POSTAL', 'UPC', 'CODE93', 'CC', 'S25_2SS', 'S25_3SS', 'MSIP', 'PHARMA',
+                      'C11', 'M25', 'TP', 'NEC25', 'OCR']
+        self.codes_values = [0x40010901, 0x40010401, 0x40010701, 0x40011301, 0x40010301, 0x40011201, 0x40010101,
+                             0x40010201, 0x40010205, 0x40010305, 0x40010501, 0x40010601, 0x40010702, 0x40010801,
+                             0x40011001, 0x40011101, 0x40011401, 0x40011501, 0x40011503, 0x40011601, 0x40011701,
+                             0x40011801, 0x40011901, 0x40012101, 0x40012201, 0x40012301]
+        i = 0
+        for index, code in enumerate(self.codes):
+            code_var = IntVar()
+            valu = self.codes_values[index]
+            c = Checkbutton(self.code_frame, text=self.codes[index], variable=code_var, onvalue=valu, offvalue=0,
+                            command=self.check_codes)
+            if i < 5:
+                c.select()
+            c.pack()
+            i = i + 1
+            self.decoder.codes_type.append(code_var)
+        self.setting_window_btn = Button(self.setting_window, command=self.setting_btn_fun, activebackground='blue',
+                                         activeforeground='white', bd=3, bg='cyan', text='确认')
+        self.setting_window_btn.place(x=162, y=760, width=self.btn_width, height=self.btn_height, )
+
+        # 照片格式
+        self.pic_str = Label(self.setting_window, text='选择图片存储格式:')
+        # 下拉框 选择图片格式
+        self.pic_type_value = StringVar()
+        self.pic_type_combox = ttk.Combobox(self.setting_window, textvariable=self.pic_type_value)
+        self.pic_type_combox['values'] = ('jpg', 'bmp', 'png')
+        self.pic_type_combox.current(0)
+        self.pic_type_combox.bind('<<ComboboxSelected>>', self.set_pic_type)
+
+        # 选择灯光开关
+        self.light_on_off_str = Label(self.setting_window, text='光照开关:')
+        self.light_on_off = StringVar()
+        self.light_on_off_combox = ttk.Combobox(self.setting_window, textvariable=self.light_on_off)
+        self.light_on_off_combox['values'] = ('on', 'off')
+        self.light_on_off_combox.current(0)
+        self.light_on_off_combox.bind('<<ComboboxSelected>>', self.set_light_on_off)
+
+        # 选择光照模式
+        self.light_mode_str = Label(self.setting_window, text='光照模式:')
+        self.light_mode = StringVar()
+        self.light_mode_combox = ttk.Combobox(self.setting_window, textvariable=self.light_mode)
+        self.light_mode_combox['values'] = ('Strobe', 'Constant')
+        self.light_mode_combox.current(0)
+        self.light_mode_combox.bind('<<ComboboxSelected>>', self.set_light_mode)
+
+        # 选择照片像素
+        self.ROI_str = Label(self.setting_window, text='设置图片像素:')
+        self.ROI_w_h = StringVar()
+        # self.ROI_entry = Entry(self.root, textvariable=self.ROI_w_h)
+        # self.ROI_btn = Button(self.root, command=self.set_ROI_fun, activebackground='blue',
+        #                       activeforeground='white', bd=3,
+        #                       bg='cyan', text='确认')
+        self.ROI_combox = ttk.Combobox(self.setting_window, textvariable=self.ROI_w_h)
+        self.ROI_combox['values'] = ('2592x2048', '1296x1024')
+        self.ROI_combox.current(0)
+        self.ROI_combox.bind('<<ComboboxSelected>>', self.set_ROI_fun)
+
+        # 设置条码数量
+        self.codes_num_str = Label(self.setting_window, text='设置条码数量:')
+        self.codes_num = StringVar()
+        self.codes_num.set(self.codes_num_value)
+        self.codes_num_entry = Entry(self.setting_window, textvariable=self.codes_num)
+        self.codes_num_entry.bind('Leave', self.set_codes_num)
+
+    def setting_btn_fun(self):
+        print(self.codes_num.get())
+        self.codes_num_value = int(self.codes_num.get())
+        self.setting_window.withdraw()
+
+    def set_codes_num(self, o):
+        print(self.codes_num.get())
+        print('sssss')
+
+    def set_ROI_fun(self, o):
+        width, height = self.ROI_w_h.get().split('x')
+        offsetX = (self.decoder.width - int(width)) // 2
+        offsetY = (self.decoder.height - int(height)) //2
+        self.cam.set_ROI(int(width), int(height), offsetX, offsetY)
+
+    def setting_config(self):
+        self.setting_window.deiconify()
+
+    def set_pic_type(self, arge):
+        print(self.pic_type_combox.get())
+        self.cam.pic_type = self.pic_type_combox.get()
+
+    def set_light_on_off(self, o):
+        state = self.light_on_off.get()
+        if state == 'on':
+            self.cam.set_light(1)
+        else:
+            self.cam.set_light(0)
+
+    def set_light_mode(self, o):
+        mode = self.light_mode.get()
+        if mode == 'Strobe':
+            self.cam.set_light_mode(0)
+        else:
+            self.cam.set_light_mode(1)
+
+    def get_scale_value(self, ev):
+        # print(ev)
+        if self.light_flag:
+            self.light_flag = False
+        else:
+            self.cam.set_light_flashTime(int(self.scale.get()))
+        print(self.scale.get())
+
+    def check_codes(self):
+        for var in self.decoder.codes_type:
+            if var.get() != 0:
+                print(hex(var.get()))
 
     def on_closing(self):
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
+            # self.cam.stop()
             self.root.quit()
 
     def gui_arrange(self):
@@ -115,6 +245,19 @@ class QrCode:
         self.log_text_frame.place(relx=56.0 / 80, rely=2.0 / 50, )
         self.ysb.pack(side=RIGHT, fill=Y)
         self.log_text.pack()
+
+        self.code_str.place(x=10,y=10)
+        self.code_frame.place(x=10, y=30, )
+        self.pic_str.place(x=200, y=10)
+        self.pic_type_combox.place(x=200, y=30)
+        self.light_on_off_str.place(x=200, y=70)
+        self.light_on_off_combox.place(x=200, y=90)
+        self.light_mode_str.place(x=200, y=130)
+        self.light_mode_combox.place(x=200, y=150)
+        self.ROI_str.place(x=200, y=190)
+        self.ROI_combox.place(x=200, y=210)
+        self.codes_num_str.place(x=200, y=250)
+        self.codes_num_entry.place(x=200, y=270)
 
     def exposure_confirm(self):
         exposure_num = self.exposure_value.get()
@@ -152,24 +295,41 @@ class QrCode:
         self.root.obr = self.filename  # 闪烁
         self.canvas.update()
 
+    def showResultByPhoto(self):
+        self.log_text.config(state=NORMAL)
+        self.log_text.delete(0.0, END)
+        for idx in range(self.decoder.ResultCount):
+            code = self.decoder.ResultList[idx].res_str.value.decode()
+            self.write_msg(str(idx) + ':' + code)
+        self.log_text.config(state=DISABLED)
+
     def drawQR(self, bounds):
         x_p = self.canvas_width / self.decoder.width
         y_p = self.canvas_height / self.decoder.height
         for idx, bound in enumerate(bounds):
             code = self.decoder.ResultList[idx].res_str.value.decode()
             self.write_msg(str(idx) + ':' + code)
-            box = self.canvas.create_polygon(int(bound[0][0] * x_p + 150), int(self.canvas_height - bound[0][1] * y_p),
-                                             int(bound[1][0] * x_p + 150), int(self.canvas_height - bound[1][1] * y_p),
-                                             int(bound[2][0] * x_p + 150), int(self.canvas_height - bound[2][1] * y_p),
-                                             int(bound[3][0] * x_p + 150), int(self.canvas_height - bound[3][1] * y_p),
-                                             outline='blue', fill='')
-            text = self.canvas.create_text(int(bound[0][0] * x_p + 250), int(self.canvas_height - bound[0][1] * y_p - 15),
+            # box = self.canvas.create_polygon(int(bound[0][0] * x_p + 140), int(self.canvas_height - bound[0][1] * y_p-5),
+            #                                  int(bound[1][0] * x_p + 155), int(self.canvas_height - bound[1][1] * y_p-5),
+            #                                  int(bound[2][0] * x_p + 155), int(self.canvas_height - bound[2][1] * y_p+5),
+            #                                  int(bound[3][0] * x_p + 140), int(self.canvas_height - bound[3][1] * y_p+5),
+            #                                  outline='blue', fill='')
+            box = self.canvas.create_polygon(int((bound[0][0]-1080 if bound[0][0]-1080 >= 0 else bound[0][0] + 1512) * x_p - 5),
+                                             int(self.canvas_height - bound[0][1] * y_p - 5),
+                                             int((bound[1][0]-1080 if bound[1][0]-1080 >= 0 else bound[1][0] + 1512) * x_p + 5),
+                                             int(self.canvas_height - bound[1][1] * y_p - 5),
+                                             int((bound[2][0]-1080 if bound[2][0]-1080 >= 0 else bound[2][0] + 1512) * x_p + 5),
+                                             int(self.canvas_height - bound[2][1] * y_p + 5),
+                                             int((bound[3][0]-1080 if bound[3][0]-1080 >= 0 else bound[3][0] + 1512) * x_p - 5),
+                                             int(self.canvas_height - bound[3][1] * y_p + 5),
+                                             outline='blue', fill='', width=3)
+            text = self.canvas.create_text(int((bound[0][0]-1080 if bound[0][0]-1080 >= 0 else bound[0][0] + 1512) * x_p + 150), int(self.canvas_height - bound[0][1] * y_p - 25),
                                            text=code, fill='blue', font=30)
             self.texts.append(text)
             self.boxes.append(box)
 
     def take_photo_thread(self):
-        self.log_text.delete(0, 'end')
+        self.log_text.delete(0.0, 'end')
         self.img_path = self.cam.take_photo()
 
     def take_photo(self):
@@ -178,8 +338,14 @@ class QrCode:
 
     def start_cam_thread(self):
         """开启相机，获取实时图像"""
+        self.init_cam()
         th = threading.Thread(target=self.cam.real_time_image)
         th.start()
+        self.filemenu.insert_command(2, label='停止', command=self.stop_cam)
+
+    def stop_cam(self):
+        self.cam.stop()
+        self.filemenu.delete(2)
 
     def change_decode_flag(self):
         if self.decode_flag:
@@ -205,24 +371,18 @@ class QrCode:
             self.cam.get_device()
             self.cam.connect_camera_by_enum()
             self.cam.start_grabbing()
+            self.exposure_value.set(self.cam.get_exposure_value())
             return True
         except:
             return False
 
-    def init_devices(self):
-        """初始化设备并检测"""
-        temp = '出现错误:\n'
-
-        # 创建相机对象
-        self.cam = Camera(self)
-        # ret_cam = self.init_cam()
-        ret_cam = True
-        # TODO  设置显示曝光时间
-        # self.exposure_value.set(self.cam.get_exposure_value())
-        # self.cam.getIP()
+    def reconnection(self):
+        self.init_cam()
+        self.filemenu.insert_command(2, label='停止', command=self.stop_cam)
 
     def main(self):
-        self.init_devices()
+        # 初始化相机
+        self.cam = Camera(self)
         # 创建pickle对象
         self.pk = PickleDB()
         file_dir_path = self.pk.get_value_from_key(self.pk.DIR_PATH)
@@ -231,10 +391,9 @@ class QrCode:
 
         self.gui_arrange()
         self.update_canvas()
-        # self.start_cam_thread()
         mainloop()
 
 
-qr = QrCode('', '')
+qr = QrCode()
 qr.gui_arrange()
 qr.main()
